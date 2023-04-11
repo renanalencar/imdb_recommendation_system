@@ -13,17 +13,19 @@ from pymongo import MongoClient, errors, ASCENDING
 from dotenv import find_dotenv, load_dotenv
 
 '''List of popular genres'''
-GENRE_LIST = ['action', 'adventure', 'animation', 'biography', 'comedy', 'crime', 'documentary', 'drama', 'family', 'fantasy', 'film-noir', 'history', 'horror', 'music', 'musical', 'mystery', 'romance', 'sci-fi', 'sport', 'superhero', 'thriller', 'war', 'western']
+# GENRE_LIST = ['action', 'adventure', 'animation', 'biography', 'comedy', 'crime', 'documentary', 'drama', 'family', 'fantasy', 'film-noir', 'history', 'horror', 'music', 'musical', 'mystery', 'romance', 'sci-fi', 'sport', 'superhero', 'thriller', 'war', 'western']
+GENRE_LIST = ['documentary', 'drama', 'family', 'fantasy', 'film-noir', 'history', 'horror', 'music', 'musical', 'mystery', 'romance', 'sci-fi', 'sport', 'superhero', 'thriller', 'war', 'western']
 
 '''List of popular TV parental ratings'''
 TV_PARENTAL_RATING = ['TV-Y', 'TV-Y7', 'TV-G', 'TV-PG', 'TV-14', 'TV-MA']
 
 '''List of missing values'''
-MISSING_VALUES = ['not certified', 'post-production', 'filming', 'announced']
+MISSING_VALUES = ['not certified', 'pre-production', 'post-production', 'filming', 'announced', 'completed']
 
-'''Maximum number of pages per title type'''
+'''Maximum number of pages per title genre'''
 MAX_PAGES = 199
 
+'''Logging object to log the messages'''
 LOGGER = logging.getLogger(__name__)
 
 '''Function to get the page content of the topic'''
@@ -69,6 +71,7 @@ def get_movie_rank(doc):
 
     for tag in movie_rank_tags:
         rank = tag.get_text().strip('.')
+        rank = rank.replace(',', '')
         movie_rank.append(rank)
 
     return movie_rank
@@ -92,12 +95,14 @@ def get_movie_year(doc):
     movie_year = []
 
     for tag in movie_year_tags:
-        year = 0
-        try:
-            # get only the year from the text
-            year = int(re.search(r'\d+', tag.get_text()).group())
-        except:
-            LOGGER.error('year not found')
+        # get only the year from the text
+        year = re.search(r'\d+', tag.get_text())
+        if year is not None:
+            year = year.group()
+            year = year.replace(',', '')
+
+        if year is None:
+            year = '0'
 
         movie_year.append(year)
 
@@ -134,12 +139,14 @@ def get_movie_runtime(doc):
     movie_runtime = []
 
     for tag in movie_feature_tags:
-        runtime = 0
+        runtime = '0'
         # get the span.runtime right inside the p.text-muted
         content = tag.select_one('p.text-muted > span.runtime')
 
         if content is not None:
             runtime = content.text[:10].replace(' min','')
+            runtime = runtime.replace(',', '')
+            
         movie_runtime.append(runtime)
     
     return movie_runtime
@@ -162,13 +169,20 @@ def get_movie_rating(doc):
     movie_rating = []
 
     for tag in movie_feature_tags:
-        rating = 0.0
+        rating = '0.0'
 
         # get the div.ratings-bar right after the p.text-muted
         content = tag.select_one('p.text-muted + div.ratings-bar')
         if content is not None:
-            rating = float(content.get_text().strip().split('\n')[0])
+            rating = content.get_text().strip().split('\n')[0]
+            rating = re.search(r'\d+\.\d+', rating)
 
+            if rating is not None:
+                rating = rating.group()
+                rating = rating.replace(',', '')
+            if rating is None:
+                rating = '0.0'
+                
         movie_rating.append(rating)
     
     return movie_rating
@@ -214,12 +228,12 @@ def get_movie_num_votes(doc):
     movie_votes = []
 
     for tag in movie_feature_tags:
-        num_votes = 0
-
+        num_votes = '0'
         # get the span[name="nv"] right after the div.ratings-bar
         content = tag.select_one('p.sort-num_votes-visible > span[name="nv"]')
         if content is not None:
-            num_votes = content.attrs['data-value']
+            num_votes_tag = content.attrs['data-value']
+            num_votes = num_votes_tag.replace(',', '')
 
         movie_votes.append(num_votes)
     
@@ -286,33 +300,43 @@ def imdb_dict(genre_search, num_pages=1):
 
 '''Function to remove duplicate movies from the data-frame'''
 def remove_duplicates(df):
-    LOGGER.info('removing duplacate data...')
+    LOGGER.info('removing duplicate data...')
 
     # We are removing duplicate movies
     df.drop_duplicates(subset='uid', keep='first', inplace=True)
+
     return df
 
 '''Function to clean the data'''
 def clean_data(df):
-    LOGGER.info('Cleaning data...')
+    LOGGER.info('cleaning data...')
 
     # We are cleaning data
     df = remove_duplicates(df)
+
     df['rank'] = df['rank'].astype(int)
     df['year'] = df['year'].astype(int)
     df['runtime'] = df['runtime'].astype(int)
     df['rating'] = df['rating'].astype(float)
     df['num_votes'] = df['num_votes'].astype(int)
+
     return df
 
 '''Function to save only movies in the data-frame'''
 def save_only_movies(df):
-    LOGGER.info('Saving only movies onto database...')
+    LOGGER.info('letting only movies onto dataframe...')
 
     # We are saving only movies
     df = df[~df['certificate'].isin(TV_PARENTAL_RATING)]
     df = df[~df['certificate'].isin(MISSING_VALUES)]
     return df
+
+'''Function to save data to json file'''
+def save_to_json(df):
+    LOGGER.info('saving data to json file...')
+
+    # We are saving data to json file
+    df.to_json('./data/raw/movies.json', orient='records', lines=True)
 
 '''Function to save data to database'''
 def save_to_db(df):
@@ -350,12 +374,13 @@ def save_to_db(df):
 def single_page_test():
     LOGGER.info('starting single test page.')
 
-    for genre in GENRE_LIST:
+    for genre in ['crime']:
         df = imdb_dict(genre)
 
         df = save_only_movies(df)
         df = clean_data(df)
 
+        save_to_json(df)
         save_to_db(df)
 
 '''Function to carry out the main program'''
@@ -370,6 +395,7 @@ def main():
         df = save_only_movies(df)
         df = clean_data(df)
 
+        save_to_json(df)
         save_to_db(df)
 
 if __name__ == "__main__":
