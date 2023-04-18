@@ -14,7 +14,7 @@ from dotenv import find_dotenv, load_dotenv
 
 '''List of popular genres'''
 # GENRE_LIST = ['action', 'adventure', 'animation', 'biography', 'comedy', 'crime', 'documentary', 'drama', 'family', 'fantasy', 'film-noir', 'history', 'horror', 'music', 'musical', 'mystery', 'romance', 'sci-fi', 'sport', 'superhero', 'thriller', 'war', 'western']
-GENRE_LIST = ['documentary', 'drama', 'family', 'fantasy', 'film-noir', 'history', 'horror', 'music', 'musical', 'mystery', 'romance', 'sci-fi', 'sport', 'superhero', 'thriller', 'war', 'western']
+GENRE_LIST = ['music', 'musical', 'mystery', 'romance', 'sci-fi', 'sport', 'superhero', 'thriller', 'war', 'western']
 
 '''List of popular TV parental ratings'''
 TV_PARENTAL_RATING = ['TV-Y', 'TV-Y7', 'TV-G', 'TV-PG', 'TV-14', 'TV-MA']
